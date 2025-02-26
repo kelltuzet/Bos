@@ -1,0 +1,74 @@
+#!/bin/bash
+
+# Объявление функций для каждой операции
+print_users() {
+  cut -d: -f1,6 /etc/passwd | sort
+}
+
+print_processes() {
+  ps -e --sort=pid
+}
+
+print_help() {
+  echo "Usage: $0 [OPTIONS]
+Options:
+  -u, --users            List users and their home directories, sorted alphabetically.
+  -p, --processes        List running processes, sorted by their PID.
+  -h, --help             Display this help message and exit.
+  -l, --log PATH         Write output to the specified file instead of stdout.
+  -e, --errors PATH      Write errors to the specified file instead of stderr."
+}
+
+# Обработка аргументов командной строки
+OPTS=$(getopt -o uphl:e: --long users,processes,help,log:,errors: -n 'parse-options' -- "$@")
+if [ $? != 0 ]; then
+  echo "Failed to parse options." >&2
+  exit 1
+fi
+
+eval set -- "$OPTS"
+
+# Переменные для хранения путей файлов логов и ошибок
+LOG_FILE=""
+ERROR_FILE=""
+
+# Разбор аргументов командной строки
+while true; do
+  case "$1" in
+    -u | --users ) ACTION="users"; shift ;;
+    -p | --processes ) ACTION="processes"; shift ;;
+    -h | --help ) ACTION="help"; shift ;;
+    -l | --log ) LOG_FILE="$2"; shift 2 ;;
+    -e | --errors ) ERROR_FILE="$2"; shift 2 ;;
+    -- ) shift; break ;;
+    * ) break ;;
+  esac
+done
+
+# Проверка доступности пути к лог-файлам
+if [[ -n "$LOG_FILE" && ! -w $(dirname "$LOG_FILE") ]]; then
+  echo "Log path is not writable: $LOG_FILE" >&2
+  exit 1
+fi
+
+if [[ -n "$ERROR_FILE" && ! -w $(dirname "$ERROR_FILE") ]]; then
+  echo "Error log path is not writable: $ERROR_FILE" >&2
+  exit 1
+fi
+
+# Перенаправление stdout и stderr в файлы, если указаны
+if [[ -n "$LOG_FILE" ]]; then
+  exec > "$LOG_FILE"
+fi
+
+if [[ -n "$ERROR_FILE" ]]; then
+  exec 2> "$ERROR_FILE"
+fi
+
+# Выполнение выбранного действия
+case "$ACTION" in
+  "users") print_users ;;
+  "processes") print_processes ;;
+  "help") print_help ;;
+  *) echo "Invalid action. Use -h or --help for usage information." >&2; exit 1 ;;
+esac
